@@ -1,0 +1,36 @@
+# Binaries
+control-plane
+agent
+admin
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+
+# Dependency directories
+vendor/
+
+# Local databases & persistent volumes
+postgres_data/
+deployments/compose/postgres_data/
+/deployments/compose/postgres_data/
+
+# Logs
+*.log
+
+# Environment variables & secrets
+.env
+.env.*
+*.seed
+*.jwt
+*.key
+*.pem
+
+# Editor / OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp

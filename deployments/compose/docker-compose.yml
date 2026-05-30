@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aacb-postgres
+    environment:
+      POSTGRES_DB: aacb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aacb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: aacb-nats
+    command: ["-c", "/etc/nats/nats.conf"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - ./nats.conf:/etc/nats/nats.conf:ro
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4222"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile.control-plane
+    container_name: aacb-control-plane
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/aacb?sslmode=disable
+      NATS_URL: nats://nats:4222
+      PORT: 8080
+      AUTO_REGISTER_AGENTS: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+  agent-sample:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile.agent
+    container_name: aacb-agent-sample
+    # Runs in standalone loop with default configs
+    command: >
+      ./agent 
+      -id agent-sample 
+      -key secret 
+      -control-plane http://control-plane:8080 
+      -nats nats://nats:4222 
+      -capabilities test_agent,calculator
+    depends_on:
+      - control-plane
+
+  # Observability Stack (V2 Prep)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: aacb-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  loki:
+    image: grafana/loki:latest
+    container_name: aacb-loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: aacb-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  postgres_data:
